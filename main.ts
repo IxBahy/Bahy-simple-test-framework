@@ -12,8 +12,57 @@ type IncludeParameter<T> = T extends string
 	: T extends Array<string | number>
 	? ArrayElement<T>
 	: never;
-// type NumberTestParams = Exclude<keyof testObject, "includes">;
-// type StringTestParams = Exclude<keyof testObject, "lt" | "lte" | "gt" | "gte">;
+
+type testFunction = (
+	...args: any[]
+) => string | number | string[] | number[] | Record<string, unknown>;
+type testObject<T = testFunction> = {
+	equals: (expected: ArrayElement<FunctionArguments<T>>) => void;
+	gt: (value: number) => void;
+	gte: (value: number) => void;
+	lt: (value: number) => void;
+	lte: (value: number) => void;
+	includes: (subValue: string | number) => void;
+	isSame: (obj: Record<string, unknown> | any[]) => void;
+};
+
+type NumberTestParams = Exclude<keyof testObject, "includes" | "isSame">;
+const NumberPropertiesToShow: readonly NumberTestParams[] = [
+	"equals",
+	"gt",
+	"gte",
+	"lt",
+	"lte",
+] as const;
+
+type NumberTestObject = Pick<testObject, NumberTestParams>;
+
+type StringTestParams = Exclude<keyof testObject, "isSame">;
+const StringPropertiesToShow: readonly StringTestParams[] = [
+	"equals",
+	"gt",
+	"gte",
+	"lt",
+	"lte",
+	"includes",
+] as const;
+type StringTestObject = Pick<testObject, StringTestParams>;
+type ObjectTestParams = Exclude<
+	keyof testObject,
+	"lt" | "lte" | "gt" | "gte" | "equals"
+>;
+type ObjectTestObject = Pick<testObject, ObjectTestParams>;
+
+const ObjectPropertiesToShow: readonly ObjectTestParams[] = [
+	"isSame",
+	"includes",
+] as const;
+
+type testFunctionReturn<T extends testFunction> = ReturnType<T> extends number
+	? NumberTestObject
+	: ReturnType<T> extends string
+	? StringTestObject
+	: ObjectTestObject;
 
 //////////////////////////////////////////////////////
 ////////////////// Type Guards ///////////////////////
@@ -38,11 +87,10 @@ function arrayIsOfType(
 /////////////////// Functions  ///////////////////////
 //////////////////////////////////////////////////////
 
-function test<
-	T extends (
-		...args: any[]
-	) => string | number | string[] | number[] | Record<string, unknown>
->(fn: T, values: FunctionArguments<T>) {
+function test<T extends testFunction>(
+	fn: T,
+	values: FunctionArguments<T>
+): testFunctionReturn<T> {
 	const result = fn(...values);
 
 	const testedValueAsNumber =
@@ -52,7 +100,7 @@ function test<
 			? Object.keys(result).length
 			: result;
 
-	const testObject = {
+	const TestingFunctions = {
 		equals: (expected: ArrayElement<typeof values>): void => {
 			try {
 				if (result === expected) {
@@ -153,8 +201,8 @@ function test<
 				console.log(error);
 			}
 		},
-		isSame: (obj: Record<string, unknown>) => {
-			if (isObject(result)) {
+		isSame: (obj: Record<string, unknown> | any[]) => {
+			if (isObject(result) || Array.isArray(result)) {
 				const first = Base64.stringify(
 					hmacSHA512(sha256(JSON.stringify(obj).trim()), "bebo")
 				);
@@ -174,8 +222,28 @@ function test<
 			// (result)
 		},
 	};
+	const testObject = {} as testFunctionReturn<T>;
+
 	if (typeof result === "number") {
+		NumberPropertiesToShow.forEach((key) => {
+			let tempObj: { [key: string]: any } = {};
+			tempObj[key] = TestingFunctions[key];
+			Object.assign(testObject, tempObj);
+		});
+	} else if (typeof result === "string") {
+		StringPropertiesToShow.forEach((key) => {
+			let tempObj: { [key: string]: any } = {};
+			tempObj[key] = TestingFunctions[key];
+			Object.assign(testObject, tempObj);
+		});
+	} else if (typeof isObject(result) || Array.isArray(result)) {
+		ObjectPropertiesToShow.forEach((key) => {
+			let tempObj: { [key: string]: any } = {};
+			tempObj[key] = TestingFunctions[key];
+			Object.assign(testObject, tempObj);
+		});
 	}
+
 	return testObject;
 }
 //////////////////////////////////////////
@@ -200,6 +268,7 @@ const concatUpperString = (a: string, b: string): string => {
 };
 
 // attempts
+
 test(concatUpperString, ["first", "second"]).equals("FIRSTSECOND");
 test(sum, [1, 3]).equals(4);
 test(appendToArray<number>, [[1, 2, 3], 5]).includes(5);
@@ -211,3 +280,9 @@ test(assignToObject<string>, [{ name: "7mo" }, "job", "batman"]).isSame({
 	name: "7mo",
 	job: "batman",
 });
+test(appendToArray<string>, [["1", "2", "3"], "batman"]).isSame([
+	"1",
+	"2",
+	"3",
+	"batman",
+]);
