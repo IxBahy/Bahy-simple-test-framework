@@ -1,3 +1,6 @@
+import sha256 from "crypto-js/sha256";
+import hmacSHA512 from "crypto-js/hmac-sha512";
+import Base64 from "crypto-js/enc-base64";
 //////////////////////////////////////////////////////
 ///////////////////// Types //////////////////////////
 //////////////////////////////////////////////////////
@@ -41,12 +44,14 @@ function test<
 	) => string | number | string[] | number[] | Record<string, unknown>
 >(fn: T, values: FunctionArguments<T>) {
 	const result = fn(...values);
+
 	const testedValueAsNumber =
 		typeof result === "string" || Array.isArray(result)
 			? result.length
 			: isObject(result)
 			? Object.keys(result).length
 			: result;
+
 	const testObject = {
 		equals: (expected: ArrayElement<typeof values>): void => {
 			try {
@@ -63,7 +68,7 @@ function test<
 				console.log(error);
 			}
 		},
-		gt: function (value: number) {
+		gt: (value: number) => {
 			try {
 				if ((testedValueAsNumber as number) > value) {
 					console.log(
@@ -148,6 +153,26 @@ function test<
 				console.log(error);
 			}
 		},
+		isSame: (obj: Record<string, unknown>) => {
+			if (isObject(result)) {
+				const first = Base64.stringify(
+					hmacSHA512(sha256(JSON.stringify(obj).trim()), "bebo")
+				);
+				const second = Base64.stringify(
+					hmacSHA512(sha256(JSON.stringify(result).trim()), "bebo")
+				);
+				try {
+					if (first === second) {
+						console.log(`${fn.name} PASSED✅✅,Both objects are the same`);
+					} else {
+						throw new Error(`${fn.name} Failed❌❌,objects are not the same`);
+					}
+				} catch (error) {
+					console.log(error);
+				}
+			}
+			// (result)
+		},
 	};
 	if (typeof result === "number") {
 	}
@@ -175,10 +200,14 @@ const concatUpperString = (a: string, b: string): string => {
 };
 
 // attempts
-// test(concatUpperString, ["first", "second"]).equals("FIRSTSECOND");
+test(concatUpperString, ["first", "second"]).equals("FIRSTSECOND");
 test(sum, [1, 3]).equals(4);
 test(appendToArray<number>, [[1, 2, 3], 5]).includes(5);
 test(appendToArray<string>, [["1", "2", "3"], "batman"]).includes("batman");
 test(assignToObject<string>, [{ name: "7mo" }, "job", "batman"]).includes(
 	"job"
 );
+test(assignToObject<string>, [{ name: "7mo" }, "job", "batman"]).isSame({
+	name: "7mo",
+	job: "batman",
+});
