@@ -6,27 +6,48 @@ import Base64 from "crypto-js/enc-base64";
 //////////////////////////////////////////////////////
 
 type FunctionArguments<T> = T extends (...args: infer A) => any ? A : never;
+
 type ArrayElement<T> = T extends (infer A)[] ? A : never;
-type IncludeParameter<T> = T extends string
-	? string
-	: T extends Array<string | number>
-	? ArrayElement<T>
-	: never;
+
+type IncludeParameter<T> = T extends any[] ? ArrayElement<T> : never;
 
 type testFunction = (
 	...args: any[]
 ) => string | number | string[] | number[] | Record<string, unknown>;
-type testObject<T = testFunction> = {
+
+type testObject<T extends testFunction = testFunction> = {
 	equals: (expected: ArrayElement<FunctionArguments<T>>) => void;
 	gt: (value: number) => void;
 	gte: (value: number) => void;
 	lt: (value: number) => void;
 	lte: (value: number) => void;
-	includes: (subValue: string | number) => void;
+	includes: (subValue: IncludeParameter<ReturnType<T>>) => void;
 	isSame: (obj: Record<string, unknown> | any[]) => void;
 };
 
 type NumberTestParams = Exclude<keyof testObject, "includes" | "isSame">;
+
+type NumberTestObject = Pick<testObject, NumberTestParams>;
+
+type StringTestParams = Exclude<keyof testObject, "isSame">;
+
+type StringTestObject = Pick<testObject, StringTestParams>;
+type ObjectTestParams = Exclude<
+	keyof testObject,
+	"lt" | "lte" | "gt" | "gte" | "equals"
+>;
+type ObjectTestObject = Pick<testObject, ObjectTestParams>;
+
+type testFunctionReturn<T extends testFunction> = ReturnType<T> extends number
+	? NumberTestObject
+	: ReturnType<T> extends string
+	? StringTestObject
+	: ObjectTestObject;
+
+//////////////////////////////////////////////////////
+/////////////////// Constants  ///////////////////////
+//////////////////////////////////////////////////////
+
 const NumberPropertiesToShow: readonly NumberTestParams[] = [
 	"equals",
 	"gt",
@@ -35,9 +56,6 @@ const NumberPropertiesToShow: readonly NumberTestParams[] = [
 	"lte",
 ] as const;
 
-type NumberTestObject = Pick<testObject, NumberTestParams>;
-
-type StringTestParams = Exclude<keyof testObject, "isSame">;
 const StringPropertiesToShow: readonly StringTestParams[] = [
 	"equals",
 	"gt",
@@ -46,23 +64,11 @@ const StringPropertiesToShow: readonly StringTestParams[] = [
 	"lte",
 	"includes",
 ] as const;
-type StringTestObject = Pick<testObject, StringTestParams>;
-type ObjectTestParams = Exclude<
-	keyof testObject,
-	"lt" | "lte" | "gt" | "gte" | "equals"
->;
-type ObjectTestObject = Pick<testObject, ObjectTestParams>;
 
 const ObjectPropertiesToShow: readonly ObjectTestParams[] = [
 	"isSame",
 	"includes",
 ] as const;
-
-type testFunctionReturn<T extends testFunction> = ReturnType<T> extends number
-	? NumberTestObject
-	: ReturnType<T> extends string
-	? StringTestObject
-	: ObjectTestObject;
 
 //////////////////////////////////////////////////////
 ////////////////// Type Guards ///////////////////////
@@ -100,7 +106,7 @@ function test<T extends testFunction>(
 			? Object.keys(result).length
 			: result;
 
-	const TestingFunctions = {
+	const TestingFunctions: testObject<T> = {
 		equals: (expected: ArrayElement<typeof values>): void => {
 			try {
 				if (result === expected) {
@@ -176,7 +182,7 @@ function test<T extends testFunction>(
 				console.log(error);
 			}
 		},
-		includes: (subValue: IncludeParameter<typeof result>) => {
+		includes: (subValue: IncludeParameter<ReturnType<T>>) => {
 			let isIncluded: boolean = false;
 			if (typeof result === "string") {
 				isIncluded = result.includes(String(subValue));
